@@ -381,6 +381,7 @@ void switch_cluster_on_button_multi_press(zigbee_switch_cluster *cluster,
                                           uint8_t press_count) {
     if (press_count >= MULTI_PRESS_CNT_TO_RESET) {
         hal_factory_reset();
+        hal_system_reset();
     }
 }
 
