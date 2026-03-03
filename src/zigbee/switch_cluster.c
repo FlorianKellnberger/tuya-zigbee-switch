@@ -11,7 +11,7 @@
 #include "relay_cluster.h"
 #include "zigbee_commands.h"
 
-#define MULTI_PRESS_CNT_TO_RESET    10
+#define MULTI_PRESS_CNT_TO_RESET    20
 
 const uint8_t  multistate_out_of_service = 0;
 const uint8_t  multistate_flags          = 0;
