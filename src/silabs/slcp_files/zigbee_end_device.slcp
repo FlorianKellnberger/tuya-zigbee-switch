@@ -140,10 +140,10 @@ configuration:
 - {name: SL_ZIGBEE_AF_PLUGIN_OTA_CLIENT_POLICY_IMAGE_TYPE_ID, value: 54179}
 - {name: SL_IOSTREAM_USART_INST_PERIPHERAL, value: 'USART1'}
 - {name: SL_IOSTREAM_USART_INST_PERIPHERAL_NO, value: '1'}
-- {name: SL_IOSTREAM_USART_INST_TX_PORT, value: 'gpioPortB'}
-- {name: SL_IOSTREAM_USART_INST_TX_PIN, value: '1'}
+- {name: SL_IOSTREAM_USART_INST_TX_PORT, value: 'gpioPortA'}
+- {name: SL_IOSTREAM_USART_INST_TX_PIN, value: '5'}
 - {name: SL_IOSTREAM_USART_INST_RX_PORT, value: 'gpioPortB'}
-- {name: SL_IOSTREAM_USART_INST_RX_PIN, value: '2'}
+- {name: SL_IOSTREAM_USART_INST_RX_PIN, value: '1'}
 - {name: DEFAULT_CONFIG, value: 'silabs_generic;silabs_generic;'}
 ui_hints: {}
 define: 

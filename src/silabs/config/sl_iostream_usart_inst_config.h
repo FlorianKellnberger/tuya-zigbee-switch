@@ -91,8 +91,8 @@
 #define SL_IOSTREAM_USART_INST_TX_PORT          gpioPortA
 #define SL_IOSTREAM_USART_INST_TX_PIN           5
 
-#define SL_IOSTREAM_USART_INST_RX_PORT          gpioPortA
-#define SL_IOSTREAM_USART_INST_RX_PIN           6
+#define SL_IOSTREAM_USART_INST_RX_PORT          gpioPortB
+#define SL_IOSTREAM_USART_INST_RX_PIN           1
 
 // #define SL_IOSTREAM_USART_INST_CTS_PORT        gpioPortA
 // #define SL_IOSTREAM_USART_INST_CTS_PIN         12

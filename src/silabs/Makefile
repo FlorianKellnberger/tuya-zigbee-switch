@@ -107,14 +107,15 @@ OTA_FILE ?= $(ZIGBEE_BUILD_DIR)/build/release/$(ZIGBEE_PROJECT_NAME)_ota.bin
 BIN_FILE ?= $(ZIGBEE_BUILD_DIR)/build/release/$(ZIGBEE_PROJECT_NAME).s37
 
 # Component exclusion based on DEBUG flag
-ifeq ($(DEBUG), 0)
-	WITHOUT_COMPONENTS = --without=iostream_usart:inst
-	WITH_COMPONENTS = --with=iostream_dummy:inst
+ifeq ($(DEBUG), 1)
+    # Force the UART component to be included for debugging
+    WITH_COMPONENTS = --with=iostream_usart:inst
+    WITHOUT_COMPONENTS = --without=iostream_dummy:inst
 else
-	WITHOUT_COMPONENTS =
-	WITH_COMPONENTS =
+    # No-Neutral Production Mode: Kill the UART component
+    WITHOUT_COMPONENTS = --without=iostream_usart:inst
+    WITH_COMPONENTS = --with=iostream_dummy:inst
 endif
-
 # Generate project files
 gen:
 	rm -rf $(ZIGBEE_BUILD_DIR)

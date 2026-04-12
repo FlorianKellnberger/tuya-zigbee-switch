@@ -17,7 +17,7 @@
 set -e                                           # Exit on error.
 cd "$(dirname "$(dirname "$(realpath "$0")")")"  # Go to project root.
 
-DEVICE=BOARD__ZIGBEE_ZTU_2  # Change this to your device
+DEVICE=SWITCH_ZEMISMART_2_TS0012  # Change this to your device
 
 # Check if device exists in database
 if ! yq -e ".${DEVICE}" device_db.yaml >/dev/null 2>&1; then
@@ -34,19 +34,23 @@ PLATFORM=$(if [[ "$MCU" == "TLSR8258" ]]; then echo "telink"; else echo "silabs"
 
 echo "Building debug firmware for device: $DEVICE (MCU: $MCU, Platform: $PLATFORM)"
 
-# Build router version with debug enabled
-echo "=== Building router version with debug ==="
-TYPE=router
-BOARD=$DEVICE DEVICE_TYPE=$TYPE DEBUG=1 make board/build-firmware
-echo "Checking if files were created for board: $DEVICE ($TYPE)"
-ls -l bin/$TYPE/$DEVICE/ 2>/dev/null || echo "No router files found"
+# Get device info from database
+MCU=$(yq -r ".${DEVICE}.mcu" device_db.yaml)
+TYPE=$(yq -r ".${DEVICE}.device_type" device_db.yaml) # Get the actual type (end_device)
+PLATFORM=$(if [[ "$MCU" == "TLSR8258" ]]; then echo "telink"; else echo "silabs"; fi)
 
-# Build end_device version with debug enabled  
-echo "=== Building end_device version with debug ==="
-TYPE=end_device
+echo "Building debug firmware for device: $DEVICE (MCU: $MCU, Type: $TYPE)"
+
+# Build only the version defined in the database
+echo "=== Building $TYPE version with debug ==="
 BOARD=$DEVICE DEVICE_TYPE=$TYPE DEBUG=1 make board/build-firmware
-echo "Checking if files were created for board: $DEVICE ($TYPE)"
-ls -l bin/$TYPE/${DEVICE}_END_DEVICE/ 2>/dev/null || echo "No end_device files found"
+
+# Updated check to look in the correct directory
+if [[ "$TYPE" == "end_device" ]]; then
+    ls -l bin/end_device/${DEVICE}_END_DEVICE/ 2>/dev/null || echo "No end_device files found"
+else
+    ls -l bin/router/$DEVICE/ 2>/dev/null || echo "No router files found"
+fi
 
 echo "=== Updating integration files ==="
 make tools/update_converters
