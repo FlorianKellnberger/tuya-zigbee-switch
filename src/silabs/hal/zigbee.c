@@ -17,6 +17,9 @@ hal_zigbee_endpoint *hal_endpoints;
 uint8_t hal_endpoints_cnt;
 static hal_zcl_activity_callback_t zcl_activity_callback = NULL;
 
+static uint32_t last_steering_attempt_ms = 0;
+
+
 static void notify_zcl_activity(void) {
     if (zcl_activity_callback != NULL) {
         zcl_activity_callback();
@@ -81,6 +84,17 @@ bool sl_zigbee_af_pre_command_received_cb(sl_zigbee_af_cluster_command_t *cmd) {
 void hal_zigbee_init(hal_zigbee_endpoint *endpoints, uint8_t endpoints_cnt) {
     hal_endpoints     = endpoints;
     hal_endpoints_cnt = endpoints_cnt;
+
+    int total_clusters = 0;
+    for (int i = 0; i < endpoints_cnt; i++) {
+        total_clusters += endpoints[i].cluster_count;
+    }
+
+    if (total_clusters > MAX_CLUSTERS) {
+        // You must know if you are over-provisioning memory
+        printf("FATAL: clusters_buffer overflow (%d > %d)\r\n", total_clusters, MAX_CLUSTERS);
+        return; 
+    }
 
     for (int i = 0; i < ZCL_FIXED_ENDPOINT_COUNT; i++) {
         sl_zigbee_af_endpoint_enable_disable(sli_zigbee_af_endpoints[i].endpoint,
@@ -181,6 +195,8 @@ sl_zigbee_af_status_t sl_zigbee_af_external_attribute_read_cb(
         find_hal_attr(endpoint, clusterId, attributeMetadata->attributeId);
 
     if (attr == NULL) {
+        printf("ZCL Read Fail: EP %d, Clus 0x%04X, Attr 0x%04X\r\n", 
+                endpoint, clusterId, attributeMetadata->attributeId);
         return SL_ZIGBEE_ZCL_STATUS_UNSUPPORTED_ATTRIBUTE;
     }
     if (maxReadLength < attr->size) {
@@ -240,7 +256,22 @@ void hal_register_on_network_status_change_callback(
 }
 
 void sl_zigbee_af_stack_status_cb(sl_status_t status) {
-    (void)status;
+    // 1. Handle Successful Join/Rejoin
+    if (status == SL_STATUS_NETWORK_UP) {
+        network_steering_in_progress = false;
+        printf("ZIGBEE: Network is UP (Joined/Rejoined).\r\n");
+    } 
+    
+    // 2. Handle Network Loss
+    else if (status == SL_STATUS_NETWORK_DOWN) {
+        // If we didn't initiate a "Leave", this is an accidental drop
+        if (hal_zigbee_get_network_status() == HAL_ZIGBEE_NETWORK_NOT_JOINED) {
+            printf("ZIGBEE: Network lost. Starting search/rejoin...\r\n");
+            hal_zigbee_start_network_steering();
+        }
+    }
+
+    // 3. Keep the UI/Application updated
     notify_network_status_change();
 }
 
@@ -249,7 +280,15 @@ void hal_zigbee_leave_network() {
 }
 
 void hal_zigbee_start_network_steering() {
-    if (!network_steering_in_progress) {
+    uint32_t now = halCommonGetInt32uMillisecondTick();
+    
+    // Check if this is the very first attempt since boot
+    bool is_first_attempt = (last_steering_attempt_ms == 0);
+    bool is_cooldown_over = (now - last_steering_attempt_ms > 30000);
+
+    if (!network_steering_in_progress && (is_first_attempt || is_cooldown_over)) {
+        printf("ZIGBEE: NWK Steering Start triggered\r\n");
+        last_steering_attempt_ms = now;
         network_steering_in_progress = true;
         sl_zigbee_af_network_steering_start();
     }

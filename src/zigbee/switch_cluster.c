@@ -14,6 +14,7 @@
 const uint8_t  multistate_out_of_service = 0;
 const uint8_t  multistate_flags          = 0;
 const uint16_t multistate_num_of_states  = 3;
+static uint8_t dummy_onoff_state = 0;
 
 #define MULTISTATE_NOT_PRESSED     0
 #define MULTISTATE_PRESS           1
@@ -123,6 +124,21 @@ void switch_cluster_add_to_endpoint(zigbee_switch_cluster *cluster,
         ZCL_CLUSTER_ON_OFF_SWITCH_CONFIG;
     endpoint->clusters[endpoint->cluster_count].attribute_count = 8;
     endpoint->clusters[endpoint->cluster_count].attributes      = cluster->attr_infos;
+    endpoint->clusters[endpoint->cluster_count].is_server       = 1;
+    endpoint->cluster_count++;
+
+    // This provides the "Server" side of OnOff that Z2M is looking for
+    // We now add a real attribute (0x0000) so Z2M can read the state without error
+    // Manual setup to satisfy the Zigbee2MQTT interview on Cluster 0x0006
+    cluster->on_off_server_attr_infos[0].attribute_id = ZCL_ATTR_ONOFF; // 0x0000
+    cluster->on_off_server_attr_infos[0].data_type_id = ZCL_DATA_TYPE_BOOLEAN;
+    cluster->on_off_server_attr_infos[0].flag         = ATTR_READONLY;
+    cluster->on_off_server_attr_infos[0].size         = 1;
+    cluster->on_off_server_attr_infos[0].value        = (uint8_t *)&dummy_onoff_state;;
+
+    endpoint->clusters[endpoint->cluster_count].cluster_id      = ZCL_CLUSTER_ON_OFF;
+    endpoint->clusters[endpoint->cluster_count].attribute_count = 1;
+    endpoint->clusters[endpoint->cluster_count].attributes      = cluster->on_off_server_attr_infos;
     endpoint->clusters[endpoint->cluster_count].is_server       = 1;
     endpoint->cluster_count++;
 

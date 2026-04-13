@@ -31,6 +31,7 @@ typedef struct {
     uint8_t              level_move_rate;
     uint8_t              level_move_direction;
     led_t *              indicator_led;
+    hal_zigbee_attribute on_off_server_attr_infos[1];
 } zigbee_switch_cluster;
 
 void switch_cluster_add_to_endpoint(zigbee_switch_cluster *cluster,

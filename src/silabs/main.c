@@ -31,7 +31,8 @@
 #include "zigbee/switch_cluster.h"
 
 // TODO: make configurable via ZCL
-#define POLLING_INTERVAL_MS    100
+#define POLLING_INTERVAL_MS_SHORT    100
+#define POLLING_INTERVAL_MS_LONG     1000
 
 void drop_old_ota_image_if_any() {
     // Drop old OTA image if any exists
@@ -51,14 +52,16 @@ int main(void) {
     // this call.
     sl_system_init();
 
+    sl_sleeptimer_delay_millisecond(1000);
+
     app_init();
 
     drop_old_ota_image_if_any();
 
     // Switch should never "long poll", as it should always be somewhat reactive
     // to ZCL commands.
-    sl_zigbee_af_set_short_poll_interval_ms_cb(POLLING_INTERVAL_MS);
-    sl_zigbee_af_set_long_poll_interval_ms_cb(POLLING_INTERVAL_MS);
+    sl_zigbee_af_set_short_poll_interval_ms_cb(POLLING_INTERVAL_MS_SHORT);
+    sl_zigbee_af_set_long_poll_interval_ms_cb(POLLING_INTERVAL_MS_LONG);
 
 #if defined(SL_CATALOG_KERNEL_PRESENT)
     // Start the kernel. Task(s) created in app_init() will start running.

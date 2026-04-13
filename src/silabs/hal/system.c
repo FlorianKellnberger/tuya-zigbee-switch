@@ -7,9 +7,18 @@
 
 void hal_system_reset(void) {
     halReboot();
+    while (1) {
+        ; 
+    }
 }
 
+
 void hal_factory_reset(void) {
+    
     hal_zigbee_leave_network();
     sl_zigbee_clear_binding_table();
+    
+    sl_sleeptimer_delay_millisecond(500);
+    
+    hal_system_reset(); 
 }
