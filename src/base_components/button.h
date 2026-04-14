@@ -15,6 +15,7 @@ typedef struct {
     uint8_t                          pressed_when_high;
     uint8_t                          pressed;
     uint8_t                          long_pressed;
+    uint8_t                          reset_triggered;
     uint32_t                         pressed_at_ms;
     uint32_t                         released_at_ms;
     uint16_t                         long_press_duration_ms;
