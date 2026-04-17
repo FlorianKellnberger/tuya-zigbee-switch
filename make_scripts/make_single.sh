@@ -17,7 +17,7 @@
 set -e                                           # Exit on error.
 cd "$(dirname "$(dirname "$(realpath "$0")")")"  # Go to project root.
 
-DEVICE=SWITCH_ZEMISMART_2_TS0012  # Change this to your device
+DEVICE=SWITCH_ZEMISMART_2_TS0011  # Change this to your device
 
 # Check if device exists in database
 if ! yq -e ".${DEVICE}" device_db.yaml >/dev/null 2>&1; then
@@ -43,7 +43,7 @@ echo "Building debug firmware for device: $DEVICE (MCU: $MCU, Type: $TYPE)"
 
 # Build only the version defined in the database
 echo "=== Building $TYPE version with debug ==="
-BOARD=$DEVICE DEVICE_TYPE=$TYPE DEBUG=1 make board/build-firmware
+BOARD=$DEVICE DEVICE_TYPE=$TYPE DEBUG=0 make board/build-firmware
 
 # Updated check to look in the correct directory
 if [[ "$TYPE" == "end_device" ]]; then
@@ -59,5 +59,4 @@ make tools/update_homed_extension
 make tools/update_supported_devices
 
 echo "=== Build complete ==="
-echo "Debug firmware built for $DEVICE"
-echo "Connect UART to view debug output on TX pin"
+echo "Production firmware built for $DEVICE"

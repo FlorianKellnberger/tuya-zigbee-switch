@@ -1,13 +1,23 @@
 #include "hal/zigbee.h"
 
 #include "app/framework/include/af.h"
+#include "app/framework/common/zigbee_app_framework_event.h"
 #include "app/framework/plugin/ota-client/ota-client.h"
 #include "network-steering.h"
 #include <stddef.h>
 #include <string.h>
+#include "hal/hal.h"
+#include "../../zigbee/consts.h"
+#include "../../zigbee/relay_cluster.h"
+#include "em_wdog.h"
 
 #define MAX_CLUSTERS    32
 #define MAX_ATTRS       128
+
+static uint32_t sync_timer_ms = 0;
+#define SYNC_DELAY_MS 1000
+
+extern zigbee_relay_cluster *relay_cluster_by_endpoint[10];
 
 sl_zigbee_af_endpoint_type_t      endpoint_type_buffer[ZCL_FIXED_ENDPOINT_COUNT];
 sl_zigbee_af_cluster_t            clusters_buffer[MAX_CLUSTERS];
@@ -18,7 +28,6 @@ uint8_t hal_endpoints_cnt;
 static hal_zcl_activity_callback_t zcl_activity_callback = NULL;
 
 static uint32_t last_steering_attempt_ms = 0;
-
 
 static void notify_zcl_activity(void) {
     if (zcl_activity_callback != NULL) {
@@ -81,6 +90,70 @@ bool sl_zigbee_af_pre_command_received_cb(sl_zigbee_af_cluster_command_t *cmd) {
     return false;
 }
 
+bool sl_zigbee_af_message_sent_cb(sl_zigbee_outgoing_message_type_t type,
+                                  uint16_t indexOrDestination,
+                                  sl_zigbee_aps_frame_t *apsFrame,
+                                  uint16_t messageTag,
+                                  uint8_t *messageContents,
+                                  sl_status_t status) {
+    // We only log if apsFrame is valid and cluster is On/Off (0x0006)
+    if (apsFrame != NULL && apsFrame->clusterId == 0x0006) {
+        // Using %02lX because sl_status_t is a long unsigned int
+        printf("ZIGBEE: Msg Sent to 0x%04X, Status: 0x%02lX (0x00=Success)\r\n", 
+                indexOrDestination, (unsigned long)status);
+    }
+    
+    return false; // Return false so the framework handles any further logic
+}
+
+void sl_zigbee_af_main_tick_cb(void) {
+    if (sync_timer_ms != 0) {
+        uint32_t now = halCommonGetInt32uMillisecondTick();
+        
+        if (now - sync_timer_ms > SYNC_DELAY_MS) {
+            sync_timer_ms = 0; 
+            printf("ZIGBEE: Starting Force Sync sequence...\r\n");
+            
+            for (uint8_t ep = 1; ep < (sizeof(relay_cluster_by_endpoint) / sizeof(relay_cluster_by_endpoint[0])); ep++) {
+                zigbee_relay_cluster *cluster = relay_cluster_by_endpoint[ep];
+                if (cluster == NULL) {
+                    printf("ZIGBEE: Sync Skip EP %d (No Cluster found)\r\n", ep);
+                    continue;
+                }
+
+                // --- 1. RELAY STATE ---
+                (void)sl_zigbee_af_next_sequence();
+                uint8_t r_payload[4] = {
+                    (uint8_t)(ZCL_ATTR_ONOFF & 0xFF), 
+                    (uint8_t)(ZCL_ATTR_ONOFF >> 8), 
+                    ZCL_DATA_TYPE_BOOLEAN, 
+                    cluster->relay->on
+                };
+                sl_zigbee_af_fill_command_global_server_to_client_report_attributes(ZCL_CLUSTER_ON_OFF, r_payload, 4);
+                sl_zigbee_af_set_command_endpoints(ep, 1);
+                sl_zigbee_af_send_command_unicast(SL_ZIGBEE_OUTGOING_DIRECT, 0x0000);
+                printf("ZIGBEE: Sync EP %d Relay: %d\r\n", ep, cluster->relay->on);
+
+                // --- 2. INDICATOR MODE (This is what Z2M usually displays) ---
+                // We use the variable from the cluster struct directly
+                (void)sl_zigbee_af_next_sequence();
+                uint8_t m_payload[4] = {
+                    (uint8_t)(ZCL_ATTR_ONOFF_INDICATOR_STATE & 0xFF), 
+                    (uint8_t)(ZCL_ATTR_ONOFF_INDICATOR_STATE >> 8), 
+                    ZCL_DATA_TYPE_ENUM8, 
+                    cluster->indicator_led_mode
+                };
+                sl_zigbee_af_fill_command_global_server_to_client_report_attributes(ZCL_CLUSTER_ON_OFF, m_payload, 4);
+                sl_zigbee_af_set_command_endpoints(ep, 1);
+                sl_zigbee_af_send_command_unicast(SL_ZIGBEE_OUTGOING_DIRECT, 0x0000);
+                printf("ZIGBEE: Sync EP %d Mode: %d\r\n", ep, cluster->indicator_led_mode);
+
+                halCommonDelayMilliseconds(100); 
+            }
+        }
+    }
+}
+
 void hal_zigbee_init(hal_zigbee_endpoint *endpoints, uint8_t endpoints_cnt) {
     hal_endpoints     = endpoints;
     hal_endpoints_cnt = endpoints_cnt;
@@ -92,7 +165,7 @@ void hal_zigbee_init(hal_zigbee_endpoint *endpoints, uint8_t endpoints_cnt) {
 
     if (total_clusters > MAX_CLUSTERS) {
         // You must know if you are over-provisioning memory
-        printf("FATAL: clusters_buffer overflow (%d > %d)\r\n", total_clusters, MAX_CLUSTERS);
+        printf("ZIGBEE: FATAL: clusters_buffer overflow (%d > %d)\r\n", total_clusters, MAX_CLUSTERS);
         return; 
     }
 
@@ -195,7 +268,7 @@ sl_zigbee_af_status_t sl_zigbee_af_external_attribute_read_cb(
         find_hal_attr(endpoint, clusterId, attributeMetadata->attributeId);
 
     if (attr == NULL) {
-        printf("ZCL Read Fail: EP %d, Clus 0x%04X, Attr 0x%04X\r\n", 
+        printf("ZIGBEE: ZCL Read Fail: EP %d, Clus 0x%04X, Attr 0x%04X\r\n", 
                 endpoint, clusterId, attributeMetadata->attributeId);
         return SL_ZIGBEE_ZCL_STATUS_UNSUPPORTED_ATTRIBUTE;
     }
@@ -256,27 +329,30 @@ void hal_register_on_network_status_change_callback(
 }
 
 void sl_zigbee_af_stack_status_cb(sl_status_t status) {
-    // 1. Handle Successful Join/Rejoin
+    // Feed the dog during network transitions
+    WDOGn_Feed(WDOG0);
     if (status == SL_STATUS_NETWORK_UP) {
         network_steering_in_progress = false;
-        printf("ZIGBEE: Network is UP (Joined/Rejoined).\r\n");
+        printf("ZIGBEE: Network UP. Sync scheduled in %dms...\r\n", SYNC_DELAY_MS);
+
+        // 1. Tell Z2M we are alive
+        sl_zigbee_send_device_announcement();
+        // start delay to sync the states
+        sync_timer_ms = halCommonGetInt32uMillisecondTick();
+
     } 
-    
-    // 2. Handle Network Loss
     else if (status == SL_STATUS_NETWORK_DOWN) {
-        // If we didn't initiate a "Leave", this is an accidental drop
         if (hal_zigbee_get_network_status() == HAL_ZIGBEE_NETWORK_NOT_JOINED) {
-            printf("ZIGBEE: Network lost. Starting search/rejoin...\r\n");
+            printf("ZIGBEE: Network lost. Starting search...\r\n");
             hal_zigbee_start_network_steering();
         }
     }
 
-    // 3. Keep the UI/Application updated
     notify_network_status_change();
 }
 
 void hal_zigbee_leave_network() {
-    sl_zigbee_leave_network(SL_ZIGBEE_LEAVE_NWK_WITH_NO_OPTION);
+    sl_zigbee_leave_network(SL_ZIGBEE_LEAVE_NWK_WITH_OPTION_REJOIN);
 }
 
 void hal_zigbee_start_network_steering() {
@@ -355,23 +431,24 @@ hal_zigbee_send_report_attr(uint8_t endpoint, uint16_t cluster_id,
     if (sl_zigbee_af_network_state() != SL_ZIGBEE_JOINED_NETWORK)
         return HAL_ZIGBEE_ERR_NOT_JOINED;
 
-    uint8_t buf[2 + 1 + 8]; /* attrId(2) + type(1) + value */
-    if (value_len > 8)
-        return HAL_ZIGBEE_ERR_BAD_ARG;
+    // This ensures the NEXT command filled will have a fresh, unique sequence number
+    // It works by updating the internal ZCL counter before the buffer is filled.
+    (void)sl_zigbee_af_next_sequence(); 
 
+    uint8_t buf[11]; 
     buf[0] = (uint8_t)(attr_id & 0xFF);
     buf[1] = (uint8_t)(attr_id >> 8);
     buf[2] = zcl_type_id;
-    if (value_len)
-        memmove(&buf[3], value, value_len);
+    if (value_len) memmove(&buf[3], value, value_len);
 
-    sl_status_t st =
-        sl_zigbee_af_fill_command_global_server_to_client_report_attributes(
+    sl_status_t st = sl_zigbee_af_fill_command_global_server_to_client_report_attributes(
             cluster_id, buf, 3 + value_len);
-    if (st != SL_STATUS_OK)
-        return HAL_ZIGBEE_ERR_SEND_FAILED;
+    
+    if (st != SL_STATUS_OK) return HAL_ZIGBEE_ERR_SEND_FAILED;
 
-    sl_zigbee_af_set_command_endpoints(endpoint, endpoint);
+    // Use 1 as destination endpoint (standard for coordinators)
+    sl_zigbee_af_set_command_endpoints(endpoint, 1);
+    
     st = sl_zigbee_af_send_command_unicast_to_bindings();
     return (st == SL_STATUS_OK) ? HAL_ZIGBEE_OK : HAL_ZIGBEE_ERR_SEND_FAILED;
 }

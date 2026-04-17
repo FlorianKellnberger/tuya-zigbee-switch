@@ -26,8 +26,6 @@
 
 #define QS_TO_MS(qs)    ((uint32_t)(qs) * 250)
 
-static const uint16_t poll_ctrl_cluster_revision = 0x01;
-
 // Single instance pointer for trampoline
 static zigbee_poll_control_cluster *poll_ctrl_instance = NULL;
 

@@ -8,6 +8,10 @@
 
 #define UNKNOWN_VERSION    0
 
+#ifndef NVM_MIGRATIONS_VERSION
+#define NVM_MIGRATIONS_VERSION 1
+#endif
+
 uint16_t read_version_in_nv() {
     uint16_t version;
 
@@ -27,7 +31,7 @@ void write_version_to_nv(uint16_t version) {
                                          sizeof(version), (uint8_t *)&version);
 
     if (res != HAL_NVM_SUCCESS) {
-        printf("Failed to write lastSeenVersion to NV, st: %d\r\n", res);
+        printf("Failed to write lastSeenVersion to NV, st: %u\r\n", (unsigned int)res);
     }
 }
 

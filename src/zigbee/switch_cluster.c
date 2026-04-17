@@ -10,6 +10,7 @@
 #include "hal/tasks.h"
 #include "relay_cluster.h"
 #include "zigbee_commands.h"
+#include "hal/hal.h"
 
 const uint8_t  multistate_out_of_service = 0;
 const uint8_t  multistate_flags          = 0;
@@ -30,6 +31,9 @@ extern uint8_t switch_clusters_cnt;
 void switch_cluster_on_button_press(zigbee_switch_cluster *cluster);
 void switch_cluster_on_button_release(zigbee_switch_cluster *cluster);
 void switch_cluster_on_button_long_press(zigbee_switch_cluster *cluster);
+void switch_cluster_binding_action_on(zigbee_switch_cluster *cluster);
+void switch_cluster_binding_action_off(zigbee_switch_cluster *cluster);
+
 static bool switch_cluster_has_valid_relay(
     const zigbee_switch_cluster *cluster);
 
@@ -49,8 +53,31 @@ static void sync_switch_indicator_led(zigbee_switch_cluster *cluster) {
 }
 
 void update_switch_clusters() {
+    uint32_t now = halCommonGetInt32uMillisecondTick();
     for (int i = 0; i < switch_clusters_cnt; i++) {
-        sync_switch_indicator_led(&switch_clusters[i]);
+        zigbee_switch_cluster *cluster = &switch_clusters[i];
+        sync_switch_indicator_led(cluster);
+        // Check for pending Zigbee reports
+        if (cluster->report_pending) {
+            // wait 20ms before sending on zigbee
+            if (now - cluster->last_event_time >= 20) {
+                // Now it's safe to send
+                hal_zigbee_notify_attribute_changed(
+                    cluster->endpoint, 
+                    ZCL_CLUSTER_MULTISTATE_INPUT_BASIC,
+                    ZCL_ATTR_MULTISTATE_INPUT_PRESENT_VALUE
+                );
+
+                // perform the binding action (sending to other lights)
+                if (cluster->multistate_state == MULTISTATE_POSITION_ON) {
+                    switch_cluster_binding_action_on(cluster);
+                } else if (cluster->multistate_state == MULTISTATE_POSITION_OFF) {
+                    switch_cluster_binding_action_off(cluster);
+                }
+
+                cluster->report_pending = false;
+            }
+        }
     }
 }
 
@@ -365,7 +392,8 @@ void switch_cluster_on_button_press(zigbee_switch_cluster *cluster) {
         if (cluster->relay_mode != ZCL_ONOFF_CONFIGURATION_RELAY_MODE_DETACHED) {
             switch_cluster_relay_action_on(cluster);
         }
-        switch_cluster_binding_action_on(cluster);
+        //Execute the binding action only after the safety delay has passed.
+        //switch_cluster_binding_action_on(cluster);
         cluster->multistate_state = MULTISTATE_POSITION_ON;
         hal_zigbee_notify_attribute_changed(
             cluster->endpoint, ZCL_CLUSTER_MULTISTATE_INPUT_BASIC,
@@ -382,9 +410,12 @@ void switch_cluster_on_button_press(zigbee_switch_cluster *cluster) {
     }
 
     cluster->multistate_state = MULTISTATE_PRESS;
-    hal_zigbee_notify_attribute_changed(cluster->endpoint,
-                                        ZCL_CLUSTER_MULTISTATE_INPUT_BASIC,
-                                        ZCL_ATTR_MULTISTATE_INPUT_PRESENT_VALUE);
+    //hal_zigbee_notify_attribute_changed(cluster->endpoint,
+    //                                    ZCL_CLUSTER_MULTISTATE_INPUT_BASIC,
+    //                                    ZCL_ATTR_MULTISTATE_INPUT_PRESENT_VALUE);
+    // Instead of hal_zigbee_notify_attribute_changed, we mark it:
+    cluster->last_event_time = halCommonGetInt32uMillisecondTick();
+    cluster->report_pending = true;
 }
 
 void switch_cluster_on_button_release(zigbee_switch_cluster *cluster) {

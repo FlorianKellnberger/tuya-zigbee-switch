@@ -139,6 +139,9 @@ gen:
 		--output-type=vscode,makefile \
 		--configuration $(EXTRA_CONFIGURATION)
 
+	@echo "Fixing ZCL Attribute overflow (256 -> 128)..."
+	@sed -i 's/ZCL_CHAR_STRING_ATTRIBUTE_TYPE, 256/ZCL_CHAR_STRING_ATTRIBUTE_TYPE, 128/g' $(ZIGBEE_BUILD_DIR)/autogen/zap-config.h
+	
 # Build targets
 build:
 	cd $(ZIGBEE_BUILD_DIR) && make -f $(ZIGBEE_PROJECT_NAME).Makefile -j32 release

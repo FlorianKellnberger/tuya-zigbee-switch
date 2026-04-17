@@ -2,7 +2,7 @@
 #include "hal/nvm.h"
 #include "nvm_items.h"
 
-uint8_t g_multi_press_reset_count = 10;
+uint8_t g_multi_press_reset_count = 20;
 
 void device_params_load_from_nv(void) {
     uint8_t          value;

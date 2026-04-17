@@ -146,8 +146,12 @@ configuration:
 - {name: SL_IOSTREAM_USART_INST_RX_PIN, value: '1'}
 - {name: DEFAULT_CONFIG, value: 'silabs_generic;silabs_generic;'}
 ui_hints: {}
-define: 
+define:
   - name: HAL_SILABS
     value: '1'
   - name: END_DEVICE
     value: '1'
+template_contribution:
+  - name: zap_config_extension
+    value:
+      custom_xml: custom-zcl.xml

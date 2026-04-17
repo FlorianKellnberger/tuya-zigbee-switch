@@ -146,6 +146,10 @@ configuration:
 - {name: DEFAULT_CONFIG, value: 'silabs_generic;silabs_generic;'}
 - {name: SL_ZIGBEE_PACKET_BUFFER_HEAP_SIZE, value: SL_ZIGBEE_MEDIUM_PACKET_BUFFER_HEAP}
 ui_hints: {}
-define: 
+define:
   - name: HAL_SILABS
     value: '1'
+template_contribution:
+  - name: zap_config_extension
+    value:
+      custom_xml: custom-zcl.xml
