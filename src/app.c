@@ -62,17 +62,8 @@ void app_task() {
 
     if (hal_zigbee_get_network_status() != HAL_ZIGBEE_NETWORK_JOINED &&
         hal_zigbee_get_network_status() != HAL_ZIGBEE_NETWORK_JOINING) {
-        // Simple Jitter Implementation
-        static uint16_t jitter_timer = 0;
-        if (jitter_timer == 0) {
-            // Pick a random delay between 1 and 5 seconds (assuming app_task is ~100ms)
-            jitter_timer = (rand() % 50) + 10; 
-        }
-
-        if (--jitter_timer == 0) {
-            printf("Jitter delay finished. Starting steering...\r\n");
+        
             hal_zigbee_start_network_steering();
-        }
     }
     if (!boot_announce_sent &&
         hal_zigbee_get_network_status() == HAL_ZIGBEE_NETWORK_JOINED) {
